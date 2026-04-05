@@ -67,7 +67,52 @@ create or replace procedure matricular_alumno(
     p_id_edicion  edicion_curso.id_edicion%type
 ) is
     v_dni         alumno.dni%type;
+    v_estado_ed   edicion_curso.estado%type;
+    v_plazas_max  edicion_curso.plazas_maximas%type;
+    v_plazas_oc   edicion_curso.plazas_ocupadas%type;
+    v_precio      curso.precio_base%type;
+    v_estado_mat  matricula.estado%type;
 begin
+    -- Comprobar alumno existente
+    begin
+        select dni into v_dni
+        from alumno
+        where dni = p_dni_alumno;
+    exception
+        when no_data_found then
+            raise_application_error(-20001, 'Alumno inexistente.');
+    end;
+
+    -- Comprobar el estado de una edición de un curso
+    begin
+        select e.estado, e.plazas_maximas, e.plazas_ocupadas, c.precio_base
+        into v_estado_ed, v_plazas_max, v_plazas_oc, v_precio
+        from edicion_curso e
+        join curso c on c.id_curso = e.id_curso
+        where e.id_edicion = p_id_edicion
+        for update;
+    exception
+        when no_data_found then
+            raise_application_error(-20002, 'Edicion inexistente.');
+    end;
+
+    -- Error por edición en estado diferente de abierta
+    if v_estado_ed <> 'ABIERTA' then
+        raise_application_error(-20003, 'La edicion no admite matriculas.');
+    end if;
+
+    -- TODO: definir estado matrícula
+    -- Inserción de matrícula 
+    insert into matricula
+    values (
+        seq_matricula.nextval,
+        p_dni_alumno,
+        p_id_edicion,
+        sysdate,
+        v_estado_mat,
+        v_precio
+    );
+
     null;
 end;
 /
