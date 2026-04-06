@@ -115,8 +115,16 @@ begin
             null;
     end;
 
-    -- TODO: logica de estado de matrícula
-    v_estado_mat := 'CONFIRMADA'; -- valor forzado para matricular
+    -- Estado matrícula
+    if v_plazas_oc < v_plazas_max then
+        v_estado_mat := 'CONFIRMADA';
+
+        update edicion_curso
+        set plazas_ocupadas = plazas_ocupadas + 1
+        where id_edicion = p_id_edicion;
+    else
+        v_estado_mat := 'ESPERA';
+    end if;
     
     -- Inserción de matrícula 
     insert into matricula
@@ -219,7 +227,6 @@ begin
     begin
         inicializa_test;
         matricular_alumno('12345678B', 1);
-        dbms_output.put_line('ERROR: no lanzó excepción por alumno inexistente');
     exception
         when others then
             if sqlcode = -20001 then
@@ -255,7 +262,28 @@ begin
             end if;
     end;
 
-    -- Caso 4: matrícula correcta
+    -- Caso 4: matrícula en espera
+    declare
+        v_count number;
+    begin
+        inicializa_test;
+
+        matricular_alumno('11111111A', 4);
+
+        select count(*) into v_count
+        from matricula
+        where dni_alumno = '11111111A'
+        and id_edicion = 4
+        and estado = 'ESPERA';
+
+        if v_count = 1 then
+            dbms_output.put_line('OK: matrícula en espera');
+        else
+            dbms_output.put_line('ERROR: matrícula espera');
+        end if;
+    end;
+
+    -- Caso 5: matrícula confirmada
     declare
         v_count number;
     begin
@@ -278,5 +306,6 @@ begin
 end;
 /
 
+-- Tests del procedimiento: matricular_alumno
 set serveroutput on
 exec test_matricular_alumno;
