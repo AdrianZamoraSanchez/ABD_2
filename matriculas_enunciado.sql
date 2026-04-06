@@ -101,6 +101,20 @@ begin
         raise_application_error(-20003, 'La edicion no admite matriculas.');
     end if;
 
+    -- Detección de duplicidad de matrícula
+    begin
+        select 1 into v_dni
+        from matricula
+        where dni_alumno = p_dni_alumno
+          and id_edicion = p_id_edicion
+          and estado in ('CONFIRMADA', 'ESPERA');
+
+        raise_application_error(-20004, 'El alumno ya tiene una matricula activa en la edicion.');
+    exception
+        when no_data_found then
+            null;
+    end;
+
     -- TODO: logica de estado de matrícula
     v_estado_mat := 'CONFIRMADA'; -- valor forzado para matricular
     
@@ -228,7 +242,20 @@ begin
             end if;
     end;
 
-    -- Caso 3: matrícula correcta
+    -- Caso 3: matrícula duplicada
+    begin
+        inicializa_test;
+        matricular_alumno('11111111A', 1);
+    exception
+        when others then
+            if sqlcode = -20004 then
+                dbms_output.put_line('OK: duplicidad' );
+            else
+                dbms_output.put_line('ERROR no esperado para duplicidad en matrícula:' || sqlerrm);
+            end if;
+    end;
+
+    -- Caso 4: matrícula correcta
     declare
         v_count number;
     begin
