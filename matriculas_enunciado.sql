@@ -101,7 +101,9 @@ begin
         raise_application_error(-20003, 'La edicion no admite matriculas.');
     end if;
 
-    -- TODO: definir estado matrícula
+    -- TODO: logica de estado de matrícula
+    v_estado_mat := 'CONFIRMADA'; -- valor forzado para matricular
+    
     -- Inserción de matrícula 
     insert into matricula
     values (
@@ -113,7 +115,7 @@ begin
         v_precio
     );
 
-    null;
+    commit;
 end;
 /
 
@@ -197,4 +199,57 @@ begin
 end;
 /
 
-exec inicializa_test;
+create or replace procedure test_matricular_alumno is
+begin
+    -- Caso 1: alumno inexistente
+    begin
+        inicializa_test;
+        matricular_alumno('12345678B', 1);
+        dbms_output.put_line('ERROR: no lanzó excepción por alumno inexistente');
+    exception
+        when others then
+            if sqlcode = -20001 then
+                dbms_output.put_line('OK: alumno inexistente');
+            else
+                dbms_output.put_line('ERROR no esperado para alumno inexistente:' || sqlerrm);
+            end if;
+    end;
+
+    -- Caso 2: edición inexistente
+    begin
+        inicializa_test;
+        matricular_alumno('11111111A', 999);
+    exception
+        when others then
+            if sqlcode = -20002 then
+                dbms_output.put_line('OK: edición inexistente');
+            else
+                dbms_output.put_line('ERROR no esperado para edición inexistente:' || sqlerrm);
+            end if;
+    end;
+
+    -- Caso 3: matrícula correcta
+    declare
+        v_count number;
+    begin
+        inicializa_test;
+
+        matricular_alumno('55555555E', 1);
+
+        select count(*) into v_count
+        from matricula
+        where dni_alumno = '55555555E'
+        and id_edicion = 1
+        and estado = 'CONFIRMADA';
+
+        if v_count = 1 then
+            dbms_output.put_line('OK: matrícula confirmada');
+        else
+            dbms_output.put_line('ERROR: matrícula confirmada');
+        end if;
+    end;
+end;
+/
+
+set serveroutput on
+exec test_matricular_alumno;
