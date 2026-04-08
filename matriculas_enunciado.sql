@@ -144,8 +144,26 @@ end;
 create or replace procedure cancelar_matricula(
     p_id_matricula  matricula.id_matricula%type
 ) is
+    v_estado      matricula.estado%type;
+    v_id_edicion  matricula.id_edicion%type;
 begin
-    null;
+    -- Obtención de la matrícula
+    begin
+        select estado, id_edicion
+        into v_estado, v_id_edicion
+        from matricula
+        where id_matricula = p_id_matricula;
+    exception
+        when no_data_found then
+            raise_application_error(-20005, 'Matricula inexistente.');
+    end;
+
+    -- Comprobación de martícula cancelada previamente
+    if v_estado = 'CANCELADA' then
+        raise_application_error(-20006, 'La matricula ya estaba cancelada.');
+    end if;
+
+    commit;
 end;
 /
 
@@ -306,6 +324,40 @@ begin
 end;
 /
 
+create or replace procedure test_cancelar_matricula is
+begin
+    -- Caso 1: alumno inexistente
+    begin
+        inicializa_test;
+        cancelar_matricula(123);
+    exception
+        when others then
+            if sqlcode = -20005 then
+                dbms_output.put_line('OK: matrícula inexistente');
+            else
+                dbms_output.put_line('ERROR no esperado para matrícula inexistente:' || sqlerrm);
+            end if;
+    end;
+
+    -- Caso 2: Matrícula ya cancelada
+    begin
+        inicializa_test;
+        cancelar_matricula(4);
+    exception
+        when others then
+            if sqlcode = -20006 then
+                dbms_output.put_line('OK: matrícula cancelada');
+            else
+                dbms_output.put_line('ERROR no esperado para matrícula cancelada:' || sqlerrm);
+            end if;
+    end;
+end;
+/
+
 -- Tests del procedimiento: matricular_alumno
 set serveroutput on
 exec test_matricular_alumno;
+
+-- Tests del procedimiento: cancelar_matricula
+set serveroutput on
+exec test_cancelar_matricula;
