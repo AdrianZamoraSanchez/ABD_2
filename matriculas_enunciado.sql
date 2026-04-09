@@ -146,6 +146,8 @@ create or replace procedure cancelar_matricula(
 ) is
     v_estado      matricula.estado%type;
     v_id_edicion  matricula.id_edicion%type;
+    v_id_bloqueo  matricula.id_edicion%type;
+    v_id_espera   matricula.id_edicion%type;
 begin
     -- Obtención de la matrícula
     begin
@@ -161,6 +163,47 @@ begin
     -- Comprobación de martícula cancelada previamente
     if v_estado = 'CANCELADA' then
         raise_application_error(-20006, 'La matricula ya estaba cancelada.');
+    end if;
+
+    -- Bloqueo de la edición
+    select id_edicion into v_id_bloqueo
+    from edicion_curso
+    where id_edicion = v_id_edicion
+    for update;
+
+    -- Cancelación
+    update matricula
+    set estado = 'CANCELADA'
+    where id_matricula = p_id_matricula;
+
+    -- Gestión de la matrícula ya confirmada
+    if v_estado = 'CONFIRMADA' then
+        update edicion_curso 
+        set plazas_ocupadas = plazas_ocupadas - 1 
+        where id_edicion = v_id_edicion;
+
+        begin
+            select id_matricula
+            into v_id_espera
+            from (
+                select id_matricula
+                from matricula
+                where id_edicion = v_id_edicion
+                  and estado = 'ESPERA'
+                order by fecha_matricula, id_matricula
+            )
+            where rownum = 1;
+
+            -- Confirmadar matrícula en espera
+            update matricula
+            set estado = 'CONFIRMADA'
+            where id_matricula = v_id_espera;
+
+            update edicion_curso
+            set plazas_ocupadas = plazas_ocupadas + 1
+            where id_edicion = v_id_edicion;
+            
+        end;
     end if;
 
     commit;
@@ -351,6 +394,45 @@ begin
                 dbms_output.put_line('ERROR no esperado para matrícula cancelada:' || sqlerrm);
             end if;
     end;
+
+    -- Caso 3: matrícula confirmada
+    declare 
+        v_estado   varchar2(12);
+    begin
+        inicializa_test;
+
+        cancelar_matricula(3);
+
+        select estado into v_estado
+        from matricula
+        where id_matricula = 3;
+
+        if v_estado = 'CANCELADA' then
+            dbms_output.put_line('OK: cancelar en espera');
+        else
+            dbms_output.put_line('ERROR cancelar en espera');
+        end if;
+    end;
+    
+    -- Caso 4: matrícula formalizada desde espera
+    declare 
+        v_estado   varchar2(12);
+    begin
+        inicializa_test;
+
+        cancelar_matricula(2);
+
+        select estado into v_estado
+        from matricula
+        where id_matricula = 3;
+
+        if v_estado = 'CONFIRMADA' then
+            dbms_output.put_line('OK: matrícula confirmada desde espera');
+        else
+            dbms_output.put_line('ERROR promoción');
+        end if;
+    end;
+    
 end;
 /
 
