@@ -214,8 +214,26 @@ create or replace procedure registrar_pago(
     p_id_matricula  matricula.id_matricula%type,
     p_importe       pago_matricula.importe%type
 ) is
+    v_estado   matricula.estado%type;
+    v_importe  matricula.importe%type;
 begin
-    null;
+    -- Comprobación matrícula
+    begin
+        select estado, importe
+        into v_estado, v_importe
+        from matricula
+        where id_matricula = p_id_matricula;
+    exception
+        when no_data_found then
+            raise_application_error(-20005, 'Matricula inexistente.');
+    end;
+
+    -- Error pago de matrícula no confirmada
+    if v_estado <> 'CONFIRMADA' then
+        raise_application_error(-20007, 'Solo se pueden pagar matriculas confirmadas.');
+    end if;
+
+    commit;
 end;
 /
 
@@ -410,7 +428,7 @@ begin
         if v_estado = 'CANCELADA' then
             dbms_output.put_line('OK: cancelar en espera');
         else
-            dbms_output.put_line('ERROR cancelar en espera');
+            dbms_output.put_line('ERROR: cancelar en espera');
         end if;
     end;
     
@@ -429,10 +447,40 @@ begin
         if v_estado = 'CONFIRMADA' then
             dbms_output.put_line('OK: matrícula confirmada desde espera');
         else
-            dbms_output.put_line('ERROR promoción');
+            dbms_output.put_line('ERROR: matrícula confirmada desde espera');
         end if;
     end;
     
+end;
+/
+
+create or replace procedure test_registrar_pago is
+begin
+    -- Caso 1: Pago sobre matrícula inexistente
+    begin
+        inicializa_test;
+        registrar_pago(999, 100);
+    exception
+        when others then
+            if sqlcode = -20005 then
+                dbms_output.put_line('OK: pago matrícula inexistente');
+            else
+                dbms_output.put_line('ERROR: pago matrícula inexistente');
+            end if;
+    end;
+
+    -- Caso 2: Pago sobre matrícula no confirmada
+    begin
+        inicializa_test;
+        registrar_pago(3, 180);
+    exception
+        when others then
+            if sqlcode = -20007 then
+                dbms_output.put_line('OK: pago no confirmada');
+            else
+                dbms_output.put_line('ERROR: pago no confirmada');
+            end if;
+    end;
 end;
 /
 
@@ -443,3 +491,7 @@ exec test_matricular_alumno;
 -- Tests del procedimiento: cancelar_matricula
 set serveroutput on
 exec test_cancelar_matricula;
+
+-- Tests del procedimiento: registrar_pago
+set serveroutput on
+exec test_registrar_pago;
