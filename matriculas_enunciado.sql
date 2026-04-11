@@ -136,8 +136,6 @@ begin
         v_estado_mat,
         v_precio
     );
-
-    commit;
 end;
 /
 
@@ -205,8 +203,6 @@ begin
             
         end;
     end if;
-
-    commit;
 end;
 /
 
@@ -216,6 +212,9 @@ create or replace procedure registrar_pago(
 ) is
     v_estado   matricula.estado%type;
     v_importe  matricula.importe%type;
+
+    e_pago_duplicado exception;
+    pragma exception_init(e_pago_duplicado, -1); -- Error ORA-00001 para violación de UNIQUE
 begin
     -- Comprobación matrícula
     begin
@@ -233,7 +232,24 @@ begin
         raise_application_error(-20007, 'Solo se pueden pagar matriculas confirmadas.');
     end if;
 
-    commit;
+    -- Comprobar importe correcto
+    if p_importe <> v_importe then
+        raise_application_error(-20008, 'El importe abonado no coincide con la matricula.');
+    end if;
+
+    -- Insertar pago correcto
+    insert into pago_matricula
+    values (
+        seq_pago.nextval,
+        p_id_matricula,
+        sysdate,
+        p_importe
+    );
+
+    -- Captura de error por duplicado
+    exception
+        when e_pago_duplicado then
+            raise_application_error(-20009, 'La matricula ya ha sido abonada.');
 end;
 /
 
@@ -480,6 +496,39 @@ begin
             else
                 dbms_output.put_line('ERROR: pago no confirmada');
             end if;
+    end;
+
+    -- Caso 3: Pago duplicado
+    begin
+        inicializa_test;
+        registrar_pago(1, 120);
+    exception
+        when others then
+            if sqlcode = -20009 then
+                dbms_output.put_line('OK: pago duplicado');
+            else
+                dbms_output.put_line('ERROR: pago duplicado');
+            end if;
+    end;
+
+    -- Caso 4: Pago correcto
+    declare
+        v_count number;
+    begin
+        inicializa_test;
+
+        matricular_alumno('22222222B', 1);
+        registrar_pago(8, 120);
+
+        select count(*) into v_count
+        from pago_matricula
+        where id_matricula = 8;
+
+        if v_count = 1 then
+            dbms_output.put_line('OK: pago correcto');
+        else
+            dbms_output.put_line('ERROR: pago correcto');
+        end if;
     end;
 end;
 /
