@@ -90,8 +90,14 @@ begin
         from edicion_curso e
         join curso c on c.id_curso = e.id_curso
         where e.id_edicion = p_id_edicion
-        for update;
+        -- Se bloquea la edición antes de comprobar plazas e insertar matrícula para
+        -- evitar que dos o más sesiones matriculen al mismo tiempo en la misma edición.
+        -- De esta forma se harán en orden según vayan acabando, de forma que
+        -- se evita matricular habiendo superarado el máximo de plazas.
+        for update; 
     exception
+        -- Si no existe ningún registro con ese id_edicion, Oracle lanza NO_DATA_FOUND,
+        -- que se transforma en el error establecido como -20002
         when no_data_found then
             raise_application_error(-20002, 'Edicion inexistente.');
     end;
@@ -167,7 +173,7 @@ begin
     select id_edicion into v_id_bloqueo
     from edicion_curso
     where id_edicion = v_id_edicion
-    for update;
+    for update; -- Bloquea la edición para evitar una promoción concurrente sobre la misma plaza
 
     -- Cancelación
     update matricula
