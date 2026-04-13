@@ -192,7 +192,7 @@ begin
             )
             where rownum = 1;
 
-            -- Confirmadar matrícula en espera
+            -- Confirmar matrícula en espera
             update matricula
             set estado = 'CONFIRMADA'
             where id_matricula = v_id_espera;
@@ -398,6 +398,19 @@ begin
             dbms_output.put_line('ERROR: matrícula confirmada');
         end if;
     end;
+
+        -- Caso 6: matricula con edición cerrada
+    begin
+        inicializa_test;
+        matricular_alumno('11111111A', 3);
+    exception
+        when others then
+            if sqlcode = -20003 then
+                dbms_output.put_line('OK: edición cerrada');
+            else
+                dbms_output.put_line('ERROR no esperado para edición cerrada: ' || sqlerrm);
+            end if;
+    end;
 end;
 /
 
@@ -429,7 +442,7 @@ begin
             end if;
     end;
 
-    -- Caso 3: matrícula confirmada
+    -- Caso 3: matrícula en espera
     declare 
         v_estado   varchar2(12);
     begin
@@ -481,7 +494,7 @@ begin
             if sqlcode = -20005 then
                 dbms_output.put_line('OK: pago matrícula inexistente');
             else
-                dbms_output.put_line('ERROR: pago matrícula inexistente');
+                dbms_output.put_line('ERROR no esperado para pago matrícula inexistente: ' || sqlerrm);
             end if;
     end;
 
@@ -494,7 +507,7 @@ begin
             if sqlcode = -20007 then
                 dbms_output.put_line('OK: pago no confirmada');
             else
-                dbms_output.put_line('ERROR: pago no confirmada');
+                dbms_output.put_line('ERROR no esperado para pago no confirmada:' || sqlerrm);
             end if;
     end;
 
@@ -507,7 +520,7 @@ begin
             if sqlcode = -20009 then
                 dbms_output.put_line('OK: pago duplicado');
             else
-                dbms_output.put_line('ERROR: pago duplicado');
+                dbms_output.put_line('ERROR no esperado para pago duplicado: ' || sqlerrm);
             end if;
     end;
 
@@ -530,17 +543,75 @@ begin
             dbms_output.put_line('ERROR: pago correcto');
         end if;
     end;
+
+    -- Caso 5: Pago con importe incorrecto
+    begin
+        inicializa_test;
+        registrar_pago(1, 999);
+    exception
+        when others then
+            if sqlcode = -20008 then
+                dbms_output.put_line('OK: importe incorrecto');
+            else
+                dbms_output.put_line('ERROR no esperado para importe incorrecto: ' || sqlerrm);
+            end if;
+    end;
 end;
 /
 
--- Tests del procedimiento: matricular_alumno
+-- Test de integración del sistema (comprueba inserciones + updates + estados finales)
+create or replace procedure test_caso_final is
+    v_estado_mat   varchar2(12);
+    v_plazas       number;
+    v_pagos        number;
+begin
+    inicializa_test;
+
+    -- Nueva matrícula confirmada
+    matricular_alumno('55555555E', 1);
+
+    -- Debe haberse creado matrícula con id 8
+    registrar_pago(8, 120);
+
+    -- Se cancela la matrícula confirmada previamente (id 2)
+    -- Debe promocionar la 3 desde espera
+    cancelar_matricula(2);
+
+    -- Se verifica promoción de matricula 3
+    select estado into v_estado_mat
+    from matricula
+    where id_matricula = 3;
+
+    -- Se verifica número de plazas de la edición 2
+    select plazas_ocupadas into v_plazas
+    from edicion_curso
+    where id_edicion = 2;
+
+    -- Se verifica pago creado
+    select count(*) into v_pagos
+    from pago_matricula
+    where id_matricula = 8;
+
+    if v_estado_mat = 'CONFIRMADA'
+       and v_plazas = 1
+       and v_pagos = 1 then
+        dbms_output.put_line('OK: test integración correcto');
+    else
+        dbms_output.put_line('ERROR en test de integración');
+    end if;
+end;
+/
+
 set serveroutput on
+
+-- Tests del procedimiento: matricular_alumno
 exec test_matricular_alumno;
 
 -- Tests del procedimiento: cancelar_matricula
-set serveroutput on
 exec test_cancelar_matricula;
 
 -- Tests del procedimiento: registrar_pago
-set serveroutput on
 exec test_registrar_pago;
+
+-- Test de integración
+exec test_caso_final;
